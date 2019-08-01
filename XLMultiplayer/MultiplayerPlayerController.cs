@@ -442,45 +442,33 @@ namespace XLMultiplayer {
 			debugWriter.WriteLine("Created New Player");
 
 			Time.timeScale = 0.0f;
-			foreach (MonoBehaviour m in source.skater.GetComponentsInChildren<MonoBehaviour>()) {
-				m.enabled = false;
-			}
-			foreach (MonoBehaviour m in source.board.GetComponentsInChildren<MonoBehaviour>()) {
-				m.enabled = false;
-			}
 
 			//Copy board from the source and reparent/rename it for the new player and remove all scripts
 			//All scripts in the game use PlayerController.Instance and end up breaking the original character if left in
 			//I'm also too lazy to convert every script to be multiplayer compatible hence why client state is just being copied
 			this.board = UnityEngine.Object.Instantiate<GameObject>(source.board, this.player.transform, false);
-			this.board.name = "New Player Board";
-			this.board.transform.localPosition = Vector3.zero;
-			debugWriter.WriteLine("Created New Board");
 			foreach (MonoBehaviour m in this.board.GetComponentsInChildren<MonoBehaviour>()) {
 				m.enabled = false;
 				debugWriter.WriteLine("Removing script from additional board");
 				UnityEngine.Object.DestroyImmediate(m);
 			}
+			this.board.name = "New Player Board";
+			this.board.transform.localPosition = Vector3.zero;
+			debugWriter.WriteLine("Created New Board");
 
 			//Copy the source players skater for our new player
 			this.skater = UnityEngine.Object.Instantiate<GameObject>(source.skater, this.player.transform, false);
-			this.skater.name = "New Player Skater";
-			this.skater.transform.localPosition = Vector3.zero;
-			debugWriter.WriteLine("Created New Skater");
 			foreach (MonoBehaviour m in this.skater.GetComponentsInChildren<MonoBehaviour>()) {
 				m.enabled = false;
 				debugWriter.WriteLine("Removing script from additional skater");
 				UnityEngine.Object.DestroyImmediate(m);
 			}
+			this.skater.name = "New Player Skater";
+			this.skater.transform.localPosition = Vector3.zero;
+			debugWriter.WriteLine("Created New Skater");
 
 			this.hips = this.skater.transform.Find("Skater").Find("Reference").Find("mixamorig_Hips");
 
-			foreach (MonoBehaviour m in source.skater.GetComponentsInChildren<MonoBehaviour>()) {
-				m.enabled = true;
-			}
-			foreach (MonoBehaviour m in source.board.GetComponentsInChildren<MonoBehaviour>()) {
-				m.enabled = true;
-			}
 			Time.timeScale = 1.0f;
 
 			this.animBools = source.animBools;
