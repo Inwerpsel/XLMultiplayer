@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -24,8 +24,7 @@ namespace XLMultiplayer {
 			}
 		}
 
-		IPAddress ip;
-		IPEndPoint ipEndPoint;
+		private IPEndPoint ipEndPoint;
 
 		public Socket tcpConnection;
 		public UdpClient udpConnection;
@@ -47,11 +46,16 @@ namespace XLMultiplayer {
 
 		MultiplayerController controller;
 
-		public NetworkClient(string ipAddr, int port, MultiplayerController controller, StreamWriter sw) {
+		public NetworkClient(MultiplayerController controller, StreamWriter sw) {
 			this.controller = controller;
 			this.debugWriter = sw;
+		}
+		
+		public void Connect(string ipAddr, int port)
+		{
 			elapsedTime = new Stopwatch();
 			elapsedTime.Start();
+			IPAddress ip;
 			try {
 				ip = IPAddress.Parse(ipAddr.Trim());
 			}catch(Exception e) {

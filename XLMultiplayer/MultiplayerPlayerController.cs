@@ -138,40 +138,36 @@ namespace XLMultiplayer {
 
 		public bool loadedAll = false;
 
-		public System.Collections.IEnumerator EncodeTextures() {
-			if (!startedEncoding) {
-				startedEncoding = true;
-				Main.statusMenu.isLoading = true;
-				Main.statusMenu.loadingStatus = 0;
-				yield return new WaitForEndOfFrame();
-				shirtMP = new MultiplayerTexture(ConvertTexture(tShirtTexture, MPTextureType.Shirt).EncodeToPNG(), new Vector2(tShirtTexture.width, tShirtTexture.height), MPTextureType.Shirt, debugWriter);
-				Main.statusMenu.loadingStatus++;
-				yield return new WaitForEndOfFrame();
-				pantsMP = new MultiplayerTexture(ConvertTexture(pantsTexture, MPTextureType.Pants).EncodeToPNG(), new Vector2(pantsTexture.width, pantsTexture.height), MPTextureType.Pants, debugWriter);
-				Main.statusMenu.loadingStatus++;
-				yield return new WaitForEndOfFrame();
-				shoesMP = new MultiplayerTexture(ConvertTexture(shoesTexture, MPTextureType.Shoes).EncodeToPNG(), new Vector2(shoesTexture.width, shoesTexture.height), MPTextureType.Shoes, debugWriter);
-				Main.statusMenu.loadingStatus++;
-				yield return new WaitForEndOfFrame();
-				hatMP = new MultiplayerTexture(ConvertTexture(hatTexture, MPTextureType.Hat).EncodeToPNG(), new Vector2(hatTexture.width, hatTexture.height), MPTextureType.Hat, debugWriter);
-				Main.statusMenu.loadingStatus++;
-				yield return new WaitForEndOfFrame();
-				boardMP = new MultiplayerTexture(ConvertTexture(skateboardTexture, MPTextureType.Board).EncodeToPNG(), new Vector2(skateboardTexture.width, skateboardTexture.height), MPTextureType.Board, debugWriter);
-				copiedTextures = true;
-				Main.statusMenu.loadingStatus++;
-				yield return new WaitForEndOfFrame();
+		public System.Collections.IEnumerator EncodeTexturesAndStartSending() {
+			Main.statusMenu.isLoading = true;
+			Main.statusMenu.loadingStatus = 0;
+			yield return new WaitForEndOfFrame();
+			shirtMP = new MultiplayerTexture(ConvertTexture(tShirtTexture, MPTextureType.Shirt).EncodeToPNG(), new Vector2(tShirtTexture.width, tShirtTexture.height), MPTextureType.Shirt, debugWriter);
+			Main.statusMenu.loadingStatus++;
+			yield return new WaitForEndOfFrame();
+			pantsMP = new MultiplayerTexture(ConvertTexture(pantsTexture, MPTextureType.Pants).EncodeToPNG(), new Vector2(pantsTexture.width, pantsTexture.height), MPTextureType.Pants, debugWriter);
+			Main.statusMenu.loadingStatus++;
+			yield return new WaitForEndOfFrame();
+			shoesMP = new MultiplayerTexture(ConvertTexture(shoesTexture, MPTextureType.Shoes).EncodeToPNG(), new Vector2(shoesTexture.width, shoesTexture.height), MPTextureType.Shoes, debugWriter);
+			Main.statusMenu.loadingStatus++;
+			yield return new WaitForEndOfFrame();
+			hatMP = new MultiplayerTexture(ConvertTexture(hatTexture, MPTextureType.Hat).EncodeToPNG(), new Vector2(hatTexture.width, hatTexture.height), MPTextureType.Hat, debugWriter);
+			Main.statusMenu.loadingStatus++;
+			yield return new WaitForEndOfFrame();
+			boardMP = new MultiplayerTexture(ConvertTexture(skateboardTexture, MPTextureType.Board).EncodeToPNG(), new Vector2(skateboardTexture.width, skateboardTexture.height), MPTextureType.Board, debugWriter);
+			copiedTextures = true;
+			Main.statusMenu.loadingStatus++;
+			yield return new WaitForEndOfFrame();
 
-				Main.statusMenu.loadingStatus++;
-				yield return new WaitForEndOfFrame();
-				yield return new WaitForEndOfFrame();
-				Main.menu.multiplayerManager.SendTextures();
-				yield return new WaitForEndOfFrame();
+			Main.statusMenu.loadingStatus++;
+			yield return new WaitForEndOfFrame();
+			yield return new WaitForEndOfFrame();
+			Main.menu.multiplayerManager.SendTextures();
+			yield return new WaitForEndOfFrame();
 
-				Main.menu.multiplayerManager.InvokeRepeating("SendUpdate", 0.5f, 1.0f / (float)MultiplayerController.tickRate);
-				yield return new WaitForEndOfFrame();
-				Main.statusMenu.isLoading = false;
-			}
-			yield break;
+			Main.menu.multiplayerManager.InvokeRepeating("SendUpdate", 0.5f, 1.0f / (float)MultiplayerController.tickRate);
+			yield return new WaitForEndOfFrame();
+			Main.statusMenu.isLoading = false;
 		}
 
 		private Texture2D ConvertTexture(Texture t, MPTextureType texType) {
@@ -435,21 +431,36 @@ namespace XLMultiplayer {
 		public void ConstructFromPlayer(MultiplayerPlayerController source) {
 			//Create a new root object for the player
 			this.player = new GameObject();
+			this.player.SetActive(false);
 			UnityEngine.Object.DontDestroyOnLoad(this.player);
 			this.player.name = "New Player";
 			this.player.transform.SetParent(null);
 			this.player.transform.position = PlayerController.Instance.transform.position;
 			debugWriter.WriteLine("Created New Player");
 
+			var origTimeScale = Time.timeScale;
 			Time.timeScale = 0.0f;
+
+			debugWriter.WriteLine("Temporarily disabling MonoBehaviors in source skater");
+			foreach (MonoBehaviour m in source.skater.GetComponentsInChildren<MonoBehaviour>()) {
+				if (m.GetType().ToString() == "XLShredReplayEditor.ReplayAudioRecorder") continue;
+				m.enabled = false;
+			}
+
+			debugWriter.WriteLine("Temporarily disabling MonoBehaviors in source board");
+			foreach (MonoBehaviour m in source.board.GetComponentsInChildren<MonoBehaviour>()) {
+				if (m.GetType().ToString() == "XLShredReplayEditor.ReplayAudioRecorder") continue;
+				m.enabled = false;
+			}
 
 			//Copy board from the source and reparent/rename it for the new player and remove all scripts
 			//All scripts in the game use PlayerController.Instance and end up breaking the original character if left in
 			//I'm also too lazy to convert every script to be multiplayer compatible hence why client state is just being copied
 			this.board = UnityEngine.Object.Instantiate<GameObject>(source.board, this.player.transform, false);
+			this.board.SetActive(false);
 			foreach (MonoBehaviour m in this.board.GetComponentsInChildren<MonoBehaviour>()) {
 				m.enabled = false;
-				debugWriter.WriteLine("Removing script from additional board");
+				debugWriter.WriteLine("Removing script from additional board: " + m.GetType());
 				UnityEngine.Object.DestroyImmediate(m);
 			}
 			this.board.name = "New Player Board";
@@ -458,9 +469,10 @@ namespace XLMultiplayer {
 
 			//Copy the source players skater for our new player
 			this.skater = UnityEngine.Object.Instantiate<GameObject>(source.skater, this.player.transform, false);
+			this.skater.SetActive(false);
 			foreach (MonoBehaviour m in this.skater.GetComponentsInChildren<MonoBehaviour>()) {
 				m.enabled = false;
-				debugWriter.WriteLine("Removing script from additional skater");
+				debugWriter.WriteLine("Removing script from additional skater" + m.GetType());
 				UnityEngine.Object.DestroyImmediate(m);
 			}
 			this.skater.name = "New Player Skater";
@@ -469,7 +481,19 @@ namespace XLMultiplayer {
 
 			this.hips = this.skater.transform.Find("Skater").Find("Reference").Find("mixamorig_Hips");
 
-			Time.timeScale = 1.0f;
+			debugWriter.WriteLine("Re-enabling MonoBehaviors source skater");
+			foreach (MonoBehaviour m in source.skater.GetComponentsInChildren<MonoBehaviour>()) {
+				if (m.GetType().ToString() == "XLShredReplayEditor.ReplayAudioRecorder") continue;
+				m.enabled = true;
+			}
+
+			debugWriter.WriteLine("Re-enabling MonoBehaviors source board");
+			foreach (MonoBehaviour m in source.board.GetComponentsInChildren<MonoBehaviour>()) {
+				if (m.GetType().ToString() == "XLShredReplayEditor.ReplayAudioRecorder") continue;
+				m.enabled = true;
+			}
+
+			Time.timeScale = origTimeScale;
 
 			this.animBools = source.animBools;
 			this.animFloats = source.animFloats;
@@ -491,9 +515,9 @@ namespace XLMultiplayer {
 			//Get the animators on the new player
 			Animator[] newSkaterAnimators = this.skater.GetComponentsInChildren<Animator>();
 			this.animator = newSkaterAnimators[0];
-			this.animator.enabled = true;
 			this.steezeAnimator = newSkaterAnimators[1];
-			newSkaterAnimators[1].enabled = true;
+//			this.animator.enabled = true;
+//			this.steezeAnimator.enabled = true;
 			debugWriter.WriteLine("Activated New Player Animators");
 
 			this.animator.enabled = false;
@@ -637,6 +661,20 @@ namespace XLMultiplayer {
 				Array.Copy(BitConverter.GetBytes(T[i].rotation.w), 0, packed, i * 28 + 24, 4);
 			}
 			return packed;
+		}
+		
+		public void Activate()
+		{
+			this.player.SetActive(true);
+            this.skater.SetActive(true);
+            this.board.SetActive(true);
+		}
+		
+		public void DeActivate()
+		{
+			this.player.SetActive(false);
+            this.skater.SetActive(false);
+            this.board.SetActive(false);
 		}
 
 		public byte[][] PackAnimator() {

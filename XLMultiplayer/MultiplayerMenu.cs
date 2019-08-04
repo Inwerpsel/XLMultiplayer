@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -7,18 +7,39 @@ using XLShredLib;
 
 namespace XLMultiplayer {
 	// Token: 0x0200005D RID: 93
-	public class MultiplayerMenu : MonoBehaviour {
-
-		private void Start() {
+	public class MultiplayerMenu : MonoBehaviour
+	{
+		private StreamWriter debugWriter;
+		
+		public MultiplayerMenu()
+		{
+			// Tried to have the menu created once at the start and then just showing/hiding it
+			// instead of it being created/destroyed but turned out to involve too many changes so best done separately.
+//            this.CreateMultiplayerMenu();
+            this.multiplayerManagerObject = new GameObject();
+            this.multiplayerManagerObject.transform.parent = this.transform;
+            this.multiplayerManager = this.multiplayerManagerObject.AddComponent<MultiplayerController>();
+            this.debugWriter = multiplayerManager.debugWriter;
+            this.multiplayerManager.CreateOurController();
+            
+            StartCoroutine(this.multiplayerManager.CreatePlayerPool());
 		}
 
 		private void Update() {
 			if (Input.GetKeyDown(KeyCode.P)) {
 				this.multiplayerMenuOpen = !this.multiplayerMenuOpen;
 				if (this.multiplayerMenuOpen) {
-					this.OpenMultiplayerMenu();
+					this.CreateMultiplayerMenu();
+					ModMenu.Instance.ShowCursor(Main.modId);
+
+					Cursor.lockState = CursorLockMode.None;
+					Cursor.visible = true;
 				} else {
-					this.CloseMultiplayerMenu();
+					this.DestroyMultiplayerMenu();
+                    ModMenu.Instance.HideCursor(Main.modId);
+
+                    Cursor.lockState = CursorLockMode.Locked;
+                    Cursor.visible = false;
 				}
 			}
 			if (this.multiplayerMenuConnectText != null) this.multiplayerMenuConnectText.text = this.multiplayerManager == null || !this.multiplayerManager.runningClient ? "Connect To Server" : "Disconnect";
@@ -30,11 +51,15 @@ namespace XLMultiplayer {
 				this.multiplayerManager.KillConnection();
 				Destroy(this.multiplayerManager);
 			}
-			CloseMultiplayerMenu();
+			DestroyMultiplayerMenu();
+			ModMenu.Instance.HideCursor(Main.modId);
+
+			Cursor.lockState = CursorLockMode.Locked;
+			Cursor.visible = false;
 		}
 
 		// Token: 0x06000448 RID: 1096 RVA: 0x0002BA4C File Offset: 0x00029C4C
-		private void OpenMultiplayerMenu() {
+		private void CreateMultiplayerMenu() {
 			if (UnityEngine.Object.FindObjectOfType<EventSystem>() == null) {
 				GameObject gameObject = new GameObject("Event System");
 				gameObject.AddComponent<EventSystem>();
@@ -120,15 +145,14 @@ namespace XLMultiplayer {
 			this.multiplayerMenuConnectButton.targetGraphic = this.multiplayerMenuConnectButtonImage;
 
 			this.multiplayerMenuConnectButton.onClick.AddListener(delegate () {
-				if (this.multiplayerManagerObject == null || !this.multiplayerManager.runningClient) {
-					if (this.multiplayerManagerObject == null) {
-						this.multiplayerManagerObject = new GameObject();
-						this.multiplayerManagerObject.transform.parent = this.transform;
-						this.multiplayerManager = this.multiplayerManagerObject.AddComponent<MultiplayerController>();
-					}
-					this.multiplayerManager.ConnectToServer(ipAddress.Equals("IP Address") ? "127.0.0.1" : ipAddress, port.Equals("Port") ? 7777 : int.Parse(port), this.username);
-				} else if (this.multiplayerManagerObject != null) {
-					this.multiplayerManager.KillConnection();
+				if (!this.multiplayerManager.runningClient) {
+					this.multiplayerManager.ConnectToServer(
+						ipAddress.Equals("IP Address") ? "127.0.0.1" : ipAddress,
+						port.Equals("Port") ? 7777 : int.Parse(port),
+						this.username
+					);
+				} else {
+                    this.multiplayerManager.KillConnection();
 				}
 			});
 
@@ -146,27 +170,34 @@ namespace XLMultiplayer {
 			this.multiplayerMenuConnectText.fontSize = 25;
 			this.multiplayerMenuConnectText.alignment = TextAnchor.MiddleCenter;
 			this.multiplayerMenuConnectText.raycastTarget = false;
-
-			ModMenu.Instance.ShowCursor(Main.modId);
-
-			Cursor.lockState = CursorLockMode.None;
-			Cursor.visible = true;
 		}
-
+		
 		// Token: 0x06000449 RID: 1097 RVA: 0x0000533E File Offset: 0x0000353E
-		private void CloseMultiplayerMenu() {
+		private void DestroyMultiplayerMenu() {
 			UnityEngine.Object.Destroy(this.multiplayerMenu);
 			UnityEngine.Object.Destroy(this.multiplayerMenuTextObject);
 			UnityEngine.Object.Destroy(this.multiplayerMenuConnectButton);
 
-			ModMenu.Instance.HideCursor(Main.modId);
-
-			Cursor.lockState = CursorLockMode.Locked;
-			Cursor.visible = false;
 		}
-
+		
+//		private void ShowMultiplayerMenu()
+//		{
+//			this.multiplayerMenu.SetActive(true);
+//			this.multiplayerMenuTextObject.SetActive(true);
+//			this.multiplayerManagerObject.SetActive(true);
+//			this.multiplayerMenuConnectTextObject.SetActive(true);
+//		}
+//
+//		private void HideMultiplayerMenu()
+//		{
+//			this.multiplayerMenu.SetActive(false);
+//			this.multiplayerMenuTextObject.SetActive(false);
+//			this.multiplayerManagerObject.SetActive(false);
+//			this.multiplayerMenuConnectTextObject.SetActive(false);
+//		}
+		
 		private void OnGUI() {
-			if (this.multiplayerMenuOpen && (this.multiplayerManagerObject == null || !this.multiplayerManager.runningClient)) {
+			if (this.multiplayerMenuOpen && !this.multiplayerManager.runningClient) {
 				Vector3[] vectors = new Vector3[4];
 				this.multiplayerMenuConnectButtonImage.rectTransform.GetWorldCorners(vectors);
 				float screenScale = Screen.height / 1080f;

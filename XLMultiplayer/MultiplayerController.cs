@@ -45,6 +45,7 @@ namespace XLMultiplayer {
 		public static byte tickRate = 32;
 
 		public MultiplayerPlayerController ourController;
+		private List<MultiplayerPlayerController> characterPool = new List<MultiplayerPlayerController>();
 		public List<MultiplayerPlayerController> otherControllers = new List<MultiplayerPlayerController>();
 
 		public StreamWriter debugWriter;
@@ -65,7 +66,26 @@ namespace XLMultiplayer {
 
 		List<float> previousFrameTimes = new List<float> ();
 
-		private void Start() {
+		public MultiplayerController()
+		{
+			this.StartNewLogFile();
+		}
+
+		private void StartNewLogFile()
+		{
+			this.debugWriter = null;
+			int i = 0;
+			while (this.debugWriter == null) {
+				string filename = "Multiplayer Debug Client" + (i == 0 ? "" : " " + i) + ".txt";
+				try {
+					this.debugWriter = new StreamWriter(filename);
+				} catch (Exception e) {
+					this.debugWriter = null;
+					i++;
+				}
+			}
+			debugWriter.WriteLine("Created debug writer at " + DateTime.Now);
+			this.debugWriter.AutoFlush = true;
 		}
 
 		private void Update() {
@@ -128,6 +148,29 @@ namespace XLMultiplayer {
 			//	this.otherControllers[0].hips.Find("mixamorig_LeftUpLeg").Rotate(1, 0, 0);
 			//}
 		}
+		
+		public void CreateOurController()
+		{
+			this.ourController = new MultiplayerPlayerController(this.debugWriter);
+			this.ourController.ConstructForPlayer();
+			this.focusedController = this.ourController;
+		}
+		
+		public System.Collections.IEnumerator CreatePlayerPool()
+		{
+			yield return new WaitForEndOfFrame();
+			
+			const int poolSize = 20;
+			foreach (var index in Enumerable.Range(0, poolSize)) {
+				debugWriter.WriteLine("Creating pool item " + index);
+				var controller = new MultiplayerPlayerController(this.debugWriter);
+				controller.ConstructFromPlayer(this.ourController);
+				controller.DeActivate();
+				debugWriter.WriteLine("Deactivated player");
+				this.characterPool.Add(controller);
+				yield return new WaitForEndOfFrame();
+			}
+		}
 
 		public void SendUpdate() {
 			this.SendPlayerPosition();
@@ -135,35 +178,23 @@ namespace XLMultiplayer {
 		}
 
 		public void ConnectToServer(string serverIP, int port, string user) {
-			if (!this.runningClient) {
-				int i = 0;
-				while (this.debugWriter == null) {
-					string filename = "Multiplayer Debug Client" + (i == 0 ? "" : " " + i.ToString()) + ".txt";
-					try {
-						this.debugWriter = new StreamWriter(filename);
-					} catch (Exception e) {
-						this.debugWriter = null;
-						i++;
-					}
-				}
-				this.debugWriter.AutoFlush = true;
-				this.debugWriter.WriteLine("Attempting to connect to server ip {0} on port {1}", serverIP, port.ToString());
+			if (this.runningClient) return;
+			
+			this.runningClient = true;
+			this.StartNewLogFile();
+			this.debugWriter.WriteLine("Attempting to connect to server ip {0} on port {1}", serverIP, port.ToString());
+			this.ourController.username = user;
 
-				this.ourController = new MultiplayerPlayerController(debugWriter);
-				this.ourController.ConstructForPlayer();
-				this.ourController.username = user;
-				this.runningClient = true;
+			client = new NetworkClient(this, this.debugWriter);
+			client.Connect(serverIP, port);
+			client.debugWriter = debugWriter;
 
-				client = new NetworkClient(serverIP, port, this, this.debugWriter);
-				client.debugWriter = debugWriter;
-
-				FullBodyBipedIK biped = Traverse.Create(PlayerController.Instance.ikController).Field("_finalIk").GetValue<FullBodyBipedIK>();
-				debugWriter.WriteLine(biped.references.pelvis.name);
-				Transform parent = biped.references.root.parent;
-				while (parent != null) {
-					debugWriter.WriteLine(parent.name);
-					parent = parent.parent;
-				}
+			FullBodyBipedIK biped = Traverse.Create(PlayerController.Instance.ikController).Field("_finalIk").GetValue<FullBodyBipedIK>();
+			debugWriter.WriteLine(biped.references.pelvis.name);
+			Transform parent = biped.references.root.parent;
+			while (parent != null) {
+				debugWriter.WriteLine(parent.name);
+				parent = parent.parent;
 			}
 		}
 
@@ -285,27 +316,45 @@ namespace XLMultiplayer {
 		}
 
 		private void AddPlayer(int playerID) {
-			MultiplayerPlayerController newController = new MultiplayerPlayerController(debugWriter);
-			newController.ConstructFromPlayer(this.ourController);
+			MultiplayerPlayerController newController = this.PopPool();
 			newController.playerID = playerID;
 			otherControllers.Add(newController);
+			newController.Activate();
 		}
 
 		private void RemovePlayer(int playerID) {
-			int index = -1;
-			for (int i = 0; i < otherControllers.Count; i++) {
-				if (otherControllers[i].playerID == playerID) {
-					index = i;
-					break;
-				}
+			var playerController = otherControllers.Find(controller => controller.playerID == playerID);
+
+			if (playerController == null) {
+				return;
 			}
-			if (index != -1) {
-				MultiplayerPlayerController controller = otherControllers[index];
-				otherControllers.RemoveAt(index);
-				Destroy(controller.player);
+			playerController.DeActivate();
+            this.Pool(playerController);
+		}
+		
+		private MultiplayerPlayerController PopPool()
+		{
+			if (this.characterPool.Count == 0) {
+				throw new Exception("Pool is empty");
 			}
+
+			var character = this.characterPool.First();
+			characterPool.Remove(character);
+
+			return character;
 		}
 
+		private void Pool(MultiplayerPlayerController controller)
+		{
+			debugWriter.WriteLine("other controllers size before remove: " + characterPool.Count);
+			otherControllers.Remove(controller);
+			debugWriter.WriteLine("other controllers size after remove: " + characterPool.Count);
+			
+			debugWriter.WriteLine("character pool size before add: " + characterPool.Count);
+			characterPool.Add(controller);
+			debugWriter.WriteLine("character pool size after add: " + characterPool.Count);
+		}
+		
 		private void SendPlayerPosition() {
 			this.SendBytes(OpCode.Position, this.ourController.PackTransforms(), false);
 		}
@@ -405,7 +454,7 @@ namespace XLMultiplayer {
 						aliveThread = new Thread(new ThreadStart(this.SendAlive));
 						aliveThread.IsBackground = true;
 						aliveThread.Start();
-						StartCoroutine(this.ourController.EncodeTextures());
+						StartCoroutine(this.ourController.EncodeTexturesAndStartSending());
 						break;
 					}
 					break;
