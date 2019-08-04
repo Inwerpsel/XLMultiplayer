@@ -516,8 +516,6 @@ namespace XLMultiplayer {
 			Animator[] newSkaterAnimators = this.skater.GetComponentsInChildren<Animator>();
 			this.animator = newSkaterAnimators[0];
 			this.steezeAnimator = newSkaterAnimators[1];
-//			this.animator.enabled = true;
-//			this.steezeAnimator.enabled = true;
 			debugWriter.WriteLine("Activated New Player Animators");
 
 			this.animator.enabled = false;
